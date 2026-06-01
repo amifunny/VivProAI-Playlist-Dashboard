@@ -40,6 +40,15 @@ All backend routes are under `/api`.
 
 ### 1) Backend
 
+
+Seed the database (required before using the app):
+
+```bash
+
+python  data_processing/data.py  data_processing/test_data.json
+
+```
+
 Python 3.9+ recommended.
 
 ```bash
@@ -51,14 +60,6 @@ python3  -m  venv  .venv
 source  .venv/bin/activate
 
 pip  install  -r  requirements.txt
-
-```
-
-Seed the database (required before using the app):
-
-```bash
-
-python  data_processing/data.py  data_processing/test_data.json
 
 ```
 

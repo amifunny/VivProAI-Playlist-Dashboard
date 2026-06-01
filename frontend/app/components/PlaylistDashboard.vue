@@ -8,6 +8,7 @@ import type { Song } from '~/types'
 const query = ref('')
 const searching = ref(false)
 const loading = ref(false)
+const csvLoading = ref(false)
 
 const playlistStore = usePlaylistStore()
 const data = computed(() => playlistStore.playlist.value)
@@ -15,10 +16,13 @@ const totalSongs = computed(() => playlistStore.totalSongs.value)
 const currentPage = ref(1)
 const pageSize = ref(10)
 const isSearchMode = ref(false)
-const { fetchPaginated, searchByTitle, updateRating } = usePlaylistApi()
+const { fetchAll, fetchPaginated, searchByTitle, updateRating } =
+  usePlaylistApi()
 const ratingLoadingSongId = ref<string | null>(null)
 const hoverSongId = ref<string | null>(null)
 const hoverStar = ref(0)
+const sortKey = ref<keyof TableRow>('index')
+const sortDirection = ref<'asc' | 'desc'>('asc')
 
 type TableRow = {
   index: number
@@ -66,6 +70,42 @@ const columns: TableColumn<TableRow>[] = [
   { accessorKey: 'num_sections', header: 'Sections' },
   { accessorKey: 'num_segments', header: 'Segments' }
 ]
+
+const csvColumns: Array<{ key: keyof Song; label: string }> = [
+  { key: 'index', label: 'index' },
+  { key: 'id', label: 'id' },
+  { key: 'title', label: 'title' },
+  { key: 'rating', label: 'rating' },
+  { key: 'danceability', label: 'danceability' },
+  { key: 'acousticness', label: 'acousticness' },
+  { key: 'energy', label: 'energy' },
+  { key: 'mode', label: 'mode' },
+  { key: 'tempo', label: 'tempo' },
+  { key: 'duration_ms', label: 'duration_ms' },
+  { key: 'num_sections', label: 'num_sections' },
+  { key: 'num_segments', label: 'num_segments' }
+]
+
+const sortedTableData = computed<TableRow[]>(() => {
+  const key = sortKey.value
+  const direction = sortDirection.value === 'asc' ? 1 : -1
+
+  return [...tableData.value].sort((a, b) => {
+    const left = a[key]
+    const right = b[key]
+
+    if (typeof left === 'number' && typeof right === 'number') {
+      return (left - right) * direction
+    }
+
+    return (
+      String(left).localeCompare(String(right), undefined, {
+        numeric: true,
+        sensitivity: 'base'
+      }) * direction
+    )
+  })
+})
 
 async function loadPage(page: number) {
   loading.value = true
@@ -120,6 +160,68 @@ function displayedRating(row: TableRow) {
   return row.rating
 }
 
+function toggleSort(column: keyof TableRow) {
+  if (sortKey.value === column) {
+    sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
+    return
+  }
+  sortKey.value = column
+  sortDirection.value = 'asc'
+}
+
+function sortIndicator(column: keyof TableRow) {
+  if (sortKey.value !== column) return ''
+  return sortDirection.value === 'asc' ? '↑' : '↓'
+}
+
+function toCsvValue(value: string | number) {
+  const text = String(value ?? '')
+  if (text.includes(',') || text.includes('"') || text.includes('\n')) {
+    return `"${text.replaceAll('"', '""')}"`
+  }
+  return text
+}
+
+function buildCsv(songs: Song[]) {
+  const header = csvColumns.map((column) => column.label).join(',')
+  const rows = songs.map((song) =>
+    csvColumns.map((column) => toCsvValue(song[column.key])).join(',')
+  )
+  return [header, ...rows].join('\n')
+}
+
+async function downloadCsv() {
+  csvLoading.value = true
+
+  let songs: Song[] = []
+  if (isSearchMode.value) {
+    songs = data.value
+  } else {
+    const response = await fetchAll()
+    songs = response?.items ?? []
+  }
+
+  csvLoading.value = false
+
+  if (songs.length === 0) {
+    toast.error('No songs available to export')
+    return
+  }
+
+  const blob = new Blob([buildCsv(songs)], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.setAttribute(
+    'download',
+    isSearchMode.value ? 'playlist-search.csv' : 'playlist-all.csv'
+  )
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
 async function searchSong() {
   const keyword = query.value.trim()
 
@@ -138,31 +240,121 @@ async function searchSong() {
   isSearchMode.value = true
   currentPage.value = 1
   playlistStore.setPlaylist(result.items)
-  playlistStore.totalSongs.value = 1
+  playlistStore.totalSongs.value = result.total
 }
 </script>
 <template>
   <div class="space-y-10">
     <p class="font-semibold text-2xl" id="playlist-table">Table</p>
     <div class="p-4 bg-white rounded shadow-md space-y-4">
-      <div class="space-x-4">
-        <input
-          class="border border-solid border-gray-400 py-2 px-4 rounded"
-          v-model="query"
-          type="search"
-          placeholder="Search by song title"
-          @keyup.enter="searchSong" />
+      <div class="flex justify-between items-center">
+        <div class="space-x-4">
+          <input
+            class="border border-solid border-gray-400 py-2 px-4 rounded"
+            v-model="query"
+            type="search"
+            placeholder="Search by song title"
+            @keyup.enter="searchSong" />
+          <button
+            :disabled="searching"
+            class="bg-primary text-white font-semibold py-[9px] px-4 cursor-pointer rounded"
+            @click="searchSong">
+            {{ searching ? 'Searching…' : 'Search' }}
+          </button>
+        </div>
         <button
-          :disabled="searching"
+          :disabled="csvLoading || loading || searching"
           class="bg-primary text-white font-semibold py-[9px] px-4 cursor-pointer rounded"
-          @click="searchSong">
-          {{ searching ? 'Searching…' : 'Search' }}
+          @click="downloadCsv">
+          {{ csvLoading ? 'Loading CSV…' : 'Download CSV' }}
         </button>
       </div>
       <UTable
         :columns="columns"
-        :data="tableData"
+        :data="sortedTableData"
         class="flex-1 border border-solid border-gray-400 rounded-md">
+        <template #index-header>
+          <button
+            class="w-[100px] cursor-pointer font-semibold"
+            @click="toggleSort('index')"
+            >Index {{ sortIndicator('index') }}</button
+          >
+        </template>
+        <template #title-header>
+          <button
+            class="cursor-pointer font-semibold"
+            @click="toggleSort('title')"
+            >Title {{ sortIndicator('title') }}</button
+          >
+        </template>
+        <template #id-header>
+          <button class="cursor-pointer font-semibold" @click="toggleSort('id')"
+            >ID {{ sortIndicator('id') }}</button
+          >
+        </template>
+        <template #rating-header>
+          <button
+            class="cursor-pointer font-semibold"
+            @click="toggleSort('rating')"
+            >Rating {{ sortIndicator('rating') }}</button
+          >
+        </template>
+        <template #danceability-header>
+          <button
+            class="cursor-pointer font-semibold"
+            @click="toggleSort('danceability')"
+            >Danceability {{ sortIndicator('danceability') }}</button
+          >
+        </template>
+        <template #acousticness-header>
+          <button
+            class="cursor-pointer font-semibold"
+            @click="toggleSort('acousticness')"
+            >Acousticness {{ sortIndicator('acousticness') }}</button
+          >
+        </template>
+        <template #energy-header>
+          <button
+            class="cursor-pointer font-semibold"
+            @click="toggleSort('energy')"
+            >Energy {{ sortIndicator('energy') }}</button
+          >
+        </template>
+        <template #mode-header>
+          <button
+            class="cursor-pointer font-semibold"
+            @click="toggleSort('mode')"
+            >Mode {{ sortIndicator('mode') }}</button
+          >
+        </template>
+        <template #tempo-header>
+          <button
+            class="cursor-pointer font-semibold"
+            @click="toggleSort('tempo')"
+            >Tempo {{ sortIndicator('tempo') }}</button
+          >
+        </template>
+        <template #duration_ms-header>
+          <button
+            class="cursor-pointer font-semibold"
+            @click="toggleSort('duration_ms')"
+            >Duration (ms) {{ sortIndicator('duration_ms') }}</button
+          >
+        </template>
+        <template #num_sections-header>
+          <button
+            class="cursor-pointer font-semibold"
+            @click="toggleSort('num_sections')"
+            >Sections {{ sortIndicator('num_sections') }}</button
+          >
+        </template>
+        <template #num_segments-header>
+          <button
+            class="cursor-pointer font-semibold"
+            @click="toggleSort('num_segments')"
+            >Segments {{ sortIndicator('num_segments') }}</button
+          >
+        </template>
         <template #rating-cell="{ row }">
           <div class="flex items-center gap-1">
             <button

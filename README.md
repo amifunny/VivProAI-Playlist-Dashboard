@@ -2,6 +2,18 @@
 
 Full-stack playlist dashboard built with Flask (API) and Nuxt 4 (UI). Also includes unit testing.
 
+### Welcome Banner
+
+![Welcome Banner](./WelcomeBanner.png)
+
+### Table
+
+![Table](./Table.png)
+
+### Chart
+
+![Chart](./Chart.png)
+
 It supports:
 
 - paginated song listing
@@ -40,15 +52,6 @@ All backend routes are under `/api`.
 
 ### 1) Backend
 
-
-Seed the database (required before using the app):
-
-```bash
-
-python  data_processing/data.py  data_processing/test_data.json
-
-```
-
 Python 3.9+ recommended.
 
 ```bash
@@ -60,6 +63,16 @@ python3  -m  venv  .venv
 source  .venv/bin/activate
 
 pip  install  -r  requirements.txt
+
+```
+
+Seed the database (required before using the app):
+
+```bash
+
+cd  backend
+
+python  data_processing/data.py  data_processing/test_data.json
 
 ```
 

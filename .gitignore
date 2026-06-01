@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+backend/storage.db
+node_modules/
+.nuxt/
+.output/
+.nitro/
+.cache/
+dist/
+.DS_Store
+.idea/
+.vscode/
+*.swp

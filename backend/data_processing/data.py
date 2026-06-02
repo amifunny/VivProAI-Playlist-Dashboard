@@ -41,8 +41,12 @@ def _to_float(value, default=0.0):
 def normalize_json(json_filename):
     path = json_filename
     
-    with open(path) as f:
-        raw_json = json.load(f)
+    try:
+        with open(path) as f:
+            raw_json = json.load(f)
+    except ValueError as exc:
+        raise ValueError(str(exc)) 
+
 
     if "id" not in raw_json:
         raise ValueError("playlist JSON is missing the 'id' column")
